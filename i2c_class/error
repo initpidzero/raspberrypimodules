@@ -1,0 +1,11 @@
+/mnt/caviar_green/code/rpi/rip_modules/i2c_class/i2c_class.c: In function ‘sub_select’:
+/mnt/caviar_green/code/rpi/rip_modules/i2c_class/i2c_class.c:53:9: warning: assignment discards ‘const’ qualifier from pointer target type [enabled by default]
+  buffer = buf;
+         ^
+/mnt/caviar_green/code/rpi/rip_modules/i2c_class/i2c_class.c: In function ‘rgb_select’:
+/mnt/caviar_green/code/rpi/rip_modules/i2c_class/i2c_class.c:86:9: warning: assignment discards ‘const’ qualifier from pointer target type [enabled by default]
+  buffer = buf;
+         ^
+WARNING: modpost: Found 1 section mismatch(es).
+To see full details build your kernel with:
+'make CONFIG_DEBUG_SECTION_MISMATCH=y'

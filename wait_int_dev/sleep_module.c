@@ -1,0 +1,165 @@
+/*
+** Author - anuz
+** This file is distibuted under GPLv2
+**/
+
+#include <linux/module.h>
+#include <linux/fs.h>
+#include <linux/platform_device.h>
+#include <linux/of_gpio.h>
+#include <linux/of_irq.h>
+#include <linux/interrupt.h>
+#include <linux/uaccess.h>
+#include <linux/miscdevice.h>
+#include <linux/wait.h>
+
+#define MAX_KEY_STATES 256
+
+static const char *keys_name = "sleep_module";
+
+static char hello_keys_buf[MAX_KEY_STATES];
+static int buf_rd, buf_wr;
+
+struct key_priv {
+	struct device *dev;
+	struct gpio_desc *gpio; /* button specific information */
+	struct miscdevice int_miscdevice; /* char device added to data structure */
+	wait_queue_head_t wq_data_available; /* initialise in probe() */
+	int irq; /* linux irq */
+};
+
+static int my_dev_read(struct file *file, char __user *buff,
+			size_t count, loff_t *off)
+{
+	int ret;
+	char ch[2];
+	struct key_priv *priv = container_of(file->private_data, struct key_priv, int_miscdevice);
+
+	dev_info(priv->dev, "Here we go reading\n");
+	/* sleep the process.
+	 * this condition is checked everytime waitqueue is woken up */
+	ret = wait_event_interruptible(priv->wq_data_available, buf_wr != buf_rd);
+	if (ret)
+		return ret;
+
+	ch[0] = hello_keys_buf[buf_rd];
+	ch[1] = '\n';
+	if (copy_to_user(buff, &ch, 2)) 
+		return -EFAULT;
+
+	buf_rd++;
+	if (buf_rd >= MAX_KEY_STATES)
+		buf_rd = 0;
+	
+	*off += 1;
+	return 2;
+}
+static const struct file_operations my_dev_fops = {
+	.owner = THIS_MODULE,
+	.read = my_dev_read
+};
+
+static irqreturn_t hello_keys_isr(int irq, void *data)
+{
+	struct key_priv *priv = data;
+	int val;
+
+	dev_info(priv->dev, "irq recieved = %s\n", keys_name);
+
+	val = gpiod_get_value(priv->gpio);
+	dev_info(priv->dev, "button val recieved = %x\n", val);
+
+	if (val == 1)
+		hello_keys_buf[buf_wr++] = 'P';
+	else
+		hello_keys_buf[buf_wr++] = 'R';
+
+	if (buf_wr >= MAX_KEY_STATES)
+		buf_wr = 0;
+
+	wake_up_interruptible(&priv->wq_data_available);
+
+	return IRQ_HANDLED;
+}
+
+static int __init my_probe(struct platform_device *pdev)
+{
+	int ret;
+	struct key_priv *priv;
+	struct device *dev = &pdev->dev;
+
+	/* allocate space for priv */
+	priv = devm_kzalloc(dev, sizeof(struct key_priv), GFP_KERNEL);
+	if (priv == 0) {
+		dev_err(&pdev->dev, "devm_kzalloc() failed \n");
+		return -ENOMEM;
+	}
+	priv->dev = dev;
+	
+	platform_set_drvdata(pdev, priv);
+	init_waitqueue_head(&priv->wq_data_available);
+	/* first method to get linuxirq */
+	priv->gpio = devm_gpiod_get(&pdev->dev, NULL, GPIOD_IN);
+	if (IS_ERR(priv->gpio)) {
+		dev_err(&pdev->dev, "gpiod_get failed \n");
+		return PTR_ERR(priv->gpio);
+	}
+	priv->irq = gpiod_to_irq(priv->gpio);
+	if (priv->irq < 0)
+		return priv->irq;
+	dev_info(dev, "irq number is %d\n", priv->irq);
+	
+	ret = devm_request_irq(dev, priv->irq, hello_keys_isr, 
+		IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING,
+			keys_name, priv);
+	if (ret) {
+		pr_info("Unable to allocate request_irq \n");
+		return ret;
+	}
+	pr_info("hello there! \n");
+	priv->int_miscdevice.name = "mydev";
+	priv->int_miscdevice.minor = MISC_DYNAMIC_MINOR;
+	priv->int_miscdevice.fops = &my_dev_fops;
+
+	/* allocate device numbers */
+	ret = misc_register(&priv->int_miscdevice);
+	if (ret < 0) {
+		pr_info("Unable to allocate misc device \n");
+		return ret;
+	}
+
+	pr_info("Device created with mino number = %d\n", priv->int_miscdevice.minor);
+	return 0;
+}
+
+static int __exit my_remove(struct platform_device *pdev)
+{
+	struct key_priv *priv = platform_get_drvdata(pdev);
+	misc_deregister(&priv->int_miscdevice);
+	pr_info("General Kenobi! \n");
+	return 0;
+}
+
+static const struct of_device_id my_of_ids[] = {
+	{ .compatible = "arrow,intkeywait"},
+	{},
+};
+
+MODULE_DEVICE_TABLE(of, my_of_ids);
+
+static struct platform_driver my_platform_driver = {
+	.probe = my_probe,
+	.remove = my_remove,
+	.driver = {
+		.name = "intkeywait",
+		.of_match_table = my_of_ids,
+		.owner = THIS_MODULE,		
+	}
+};
+
+/* Register your platform driver */
+module_platform_driver(my_platform_driver);
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("me@anuz.me");
+MODULE_DESCRIPTION("Sleep wait module");

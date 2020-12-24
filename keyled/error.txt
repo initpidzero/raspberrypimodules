@@ -1,0 +1,29 @@
+/mnt/caviar_green/code/rpi/rip_modules/keyled/keyled_module.c: In function ‘led_flash’:
+/mnt/caviar_green/code/rpi/rip_modules/keyled/keyled_module.c:59:3: error: implicit declaration of function ‘spin_lock_irqrestore’ [-Werror=implicit-function-declaration]
+   spin_lock_irqrestore(&led_dev->private->period_lock, flags);
+   ^
+/mnt/caviar_green/code/rpi/rip_modules/keyled/keyled_module.c: In function ‘my_probe’:
+/mnt/caviar_green/code/rpi/rip_modules/keyled/keyled_module.c:352:4: error: implicit declaration of function ‘devm_get_gpiod_from_child’ [-Werror=implicit-function-declaration]
+    new_led->ledd = devm_get_gpiod_from_child(dev, NULL, child);
+    ^
+/mnt/caviar_green/code/rpi/rip_modules/keyled/keyled_module.c:352:18: warning: assignment makes pointer from integer without a cast [enabled by default]
+    new_led->ledd = devm_get_gpiod_from_child(dev, NULL, child);
+                  ^
+/mnt/caviar_green/code/rpi/rip_modules/keyled/keyled_module.c:371:9: warning: assignment makes pointer from integer without a cast [enabled by default]
+    keyd = devm_get_gpiod_from_child(dev, NULL, child);
+         ^
+/mnt/caviar_green/code/rpi/rip_modules/keyled/keyled_module.c:394:9: warning: assignment makes pointer from integer without a cast [enabled by default]
+    keyd = devm_get_gpiod_from_child(dev, NULL, child);
+         ^
+/mnt/caviar_green/code/rpi/rip_modules/keyled/keyled_module.c: At top level:
+/mnt/caviar_green/code/rpi/rip_modules/keyled/keyled_module.c:468:34: error: array type has incomplete element type
+ static const struct of_device_id my_of_ids[] = {
+                                  ^
+/mnt/caviar_green/code/rpi/rip_modules/keyled/keyled_module.c:469:2: error: field name not in record or union initializer
+  { .compatible = "arrow,ledpwm"},
+  ^
+/mnt/caviar_green/code/rpi/rip_modules/keyled/keyled_module.c:469:2: error: (near initialization for ‘my_of_ids’)
+cc1: some warnings being treated as errors
+make[2]: *** [scripts/Makefile.build:310: /mnt/caviar_green/code/rpi/rip_modules/keyled/keyled_module.o] Error 1
+make[1]: *** [Makefile:1524: _module_/mnt/caviar_green/code/rpi/rip_modules/keyled] Error 2
+make: *** [Makefile:6: all] Error 2

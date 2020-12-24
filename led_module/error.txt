@@ -1,0 +1,38 @@
+make -C /mnt/caviar_green/code/rpi/linux \
+	ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- \
+	SUBDIRS=/mnt/caviar_green/code/rpi/rip_modules/led_module modules
+make[1]: Entering directory '/mnt/caviar_green/code/rpi/linux'
+  CC [M]  /mnt/caviar_green/code/rpi/rip_modules/led_module/led_module.o
+In file included from /mnt/caviar_green/code/rpi/rip_modules/led_module/led_module.c:6:0:
+./include/linux/module.h:214:1: error: expected ‘,’ or ‘;’ before ‘extern’
+ extern typeof(name) __mod_##type##__##name##_device_table  \
+ ^
+/mnt/caviar_green/code/rpi/rip_modules/led_module/led_module.c:193:1: note: in expansion of macro ‘MODULE_DEVICE_TABLE’
+ MODULE_DEVICE_TABLE(of, my_of_ids);
+ ^
+/mnt/caviar_green/code/rpi/rip_modules/led_module/led_module.c: In function ‘led_init’:
+/mnt/caviar_green/code/rpi/rip_modules/led_module/led_module.c:226:2: warning: left shift count >= width of type [enabled by default]
+  gpsel_write = (gpsel_read & ~GPIO_MASK_ALL_LEDS) | 
+  ^
+/mnt/caviar_green/code/rpi/rip_modules/led_module/led_module.c:227:4: warning: left shift count >= width of type [enabled by default]
+    (GPIO_SET_FUNCTION_LEDS & GPIO_MASK_ALL_LEDS);
+    ^
+/mnt/caviar_green/code/rpi/rip_modules/led_module/led_module.c:227:49: error: expected ‘)’ before ‘;’ token
+    (GPIO_SET_FUNCTION_LEDS & GPIO_MASK_ALL_LEDS);
+                                                 ^
+/mnt/caviar_green/code/rpi/rip_modules/led_module/led_module.c:233:1: error: expected ‘)’ before ‘}’ token
+ }
+ ^
+/mnt/caviar_green/code/rpi/rip_modules/led_module/led_module.c:233:1: error: expected ‘)’ before ‘}’ token
+/mnt/caviar_green/code/rpi/rip_modules/led_module/led_module.c:233:1: error: expected ‘)’ before ‘}’ token
+/mnt/caviar_green/code/rpi/rip_modules/led_module/led_module.c:233:1: error: expected ‘)’ before ‘}’ token
+/mnt/caviar_green/code/rpi/rip_modules/led_module/led_module.c:233:1: error: expected ‘)’ before ‘}’ token
+cc1: warning: left shift count >= width of type [enabled by default]
+/mnt/caviar_green/code/rpi/rip_modules/led_module/led_module.c:233:1: error: expected ‘;’ before ‘}’ token
+/mnt/caviar_green/code/rpi/rip_modules/led_module/led_module.c:233:1: warning: control reaches end of non-void function [-Wreturn-type]
+ }
+ ^
+make[2]: *** [scripts/Makefile.build:310: /mnt/caviar_green/code/rpi/rip_modules/led_module/led_module.o] Error 1
+make[1]: *** [Makefile:1524: _module_/mnt/caviar_green/code/rpi/rip_modules/led_module] Error 2
+make[1]: Leaving directory '/mnt/caviar_green/code/rpi/linux'
+make: *** [Makefile:6: all] Error 2
