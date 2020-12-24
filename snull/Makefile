@@ -1,4 +1,4 @@
-obj-m += snull.o
+obj-m += snull_anuz.o
 
 KERNEL_DIR ?= /mnt/caviar_green/code/rpi/linux
 

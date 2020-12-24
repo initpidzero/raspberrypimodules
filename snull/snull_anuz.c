@@ -60,7 +60,7 @@ module_param(timeout, int, 0);
 
 /* do we use napi or not ? */
 static int use_napi = 0;
-module_param(timeout, int, 0);
+module_param(use_napi, int, 0);
 
 int pool_size = 8;
 module_param(pool_size, int, 0);
@@ -383,16 +383,16 @@ void printk_ip_packet(struct iphdr *ih, int dir)
 	if (dir) {
 		printk("%d.%d.%d.%d:%05d\n -> %d.%d.%d.%d:%05d\n",
 			saddr[3], saddr[2], saddr[1], saddr[0],
-			ntohs((struct tcphdr *)(ih + 1)->h_source),
+			ntohs(((struct tcphdr *)(ih + 1))->source),
 			daddr[3], daddr[2], daddr[1], daddr[0],
-			ntohs((struct tcphdr *)(ih + 1)->h_dest));
+			ntohs(((struct tcphdr *)(ih + 1))->dest));
 
 	} else {
 		printk("%d.%d.%d.%d:%05d\n -> %d.%d.%d.%d:%05d\n",
 			daddr[3], daddr[2], daddr[1], daddr[0],
-			ntohs((struct tcphdr *)(ih + 1)->h_dest),
+			ntohs(((struct tcphdr *)(ih + 1))->dest),
 			saddr[3], saddr[2], saddr[1], saddr[0],
-			ntohs((struct tcphdr *)(ih + 1)->h_source));
+			ntohs(((struct tcphdr *)(ih + 1))->source));
 	}
 }
 
@@ -691,7 +691,7 @@ out:
 }
 
 module_init(snull_init);
-module_init(snull_cleanup);
+module_exit(snull_cleanup);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("me@anuz.me");
