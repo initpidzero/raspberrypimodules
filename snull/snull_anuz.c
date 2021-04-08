@@ -430,7 +430,7 @@ void snull_hw_tx(char *data, int len, struct net_device *dev)
 	saddr = &ih->saddr;
 	daddr = &ih->daddr;
 
-	printk_ip_packet(ih, dev == snull_devs[0]);
+	printk_ip_packet(ih, dev_num);
 
 	((u8 *)saddr)[2] ^= 1; /* flip the third octet last bit */
 	((u8 *)daddr)[2] ^= 1; /* flip the third octet last bit */
