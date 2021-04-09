@@ -744,9 +744,6 @@ void snull_cleanup(void)
     return;
 }
 
-
-
-
 int snull_init_module(void)
 {
     int result, i, ret = -ENOMEM;
@@ -777,7 +774,6 @@ int snull_init_module(void)
     printk(KERN_INFO "snull_init_module finish\n");
     return ret;
 }
-
 
 module_init(snull_init_module);
 module_exit(snull_cleanup);
