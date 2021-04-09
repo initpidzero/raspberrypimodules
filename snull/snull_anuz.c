@@ -87,7 +87,8 @@ struct net_device_stats *snull_stats(struct net_device *dev)
 }
 
 /* fill ETH header since there is no APR function */
-int snull_header_cache(const struct neighbour *neigh, struct hh_cache *hh, __be16 type)
+int snull_header_cache(const struct neighbour *neigh, struct hh_cache *hh,
+		       __be16 type)
 {
 	int ret;
 	printk("header cache");
@@ -97,7 +98,8 @@ int snull_header_cache(const struct neighbour *neigh, struct hh_cache *hh, __be1
 		struct ethhdr *eth;
 		struct net_device *dev;
 
-		eth = (struct ethhdr *)(((u8 *)hh->hh_data) + HH_DATA_OFF(sizeof(*eth)));
+		eth = (struct ethhdr *)(((u8 *)hh->hh_data) +
+					HH_DATA_OFF(sizeof(*eth)));
 		dev = neigh->dev;
 
 		memcpy(eth->h_source, dev->dev_addr, dev->addr_len);
@@ -508,7 +510,8 @@ void snull_tx_timeout(struct net_device *dev)
 {
 	struct snull_priv *priv = netdev_priv(dev);
 	//PDEBUG("Transmit timeout at %ld latency %ld", jiffies, jiffies - dev->trans_start);
-	PDEBUG("Transmit timeout at %ld latency %ld", jiffies, jiffies - dev_trans_start(dev));
+	PDEBUG("Transmit timeout at %ld latency %ld", jiffies, jiffies -
+	       dev_trans_start(dev));
 	/* simulate a transmission interruption for this to start */
 	priv->status = SNULL_TX_INTR;
 	snull_interrupt(0, dev, NULL); /* fill the missing interrupt */
@@ -665,14 +668,15 @@ static int __init snull_init(void)
 	int i;
 	int ret;
 
-	snull_interrupt = use_napi ? snull_napi_interrupt : snull_regular_interrupt;
+	snull_interrupt = use_napi ? snull_napi_interrupt :
+		snull_regular_interrupt;
 
 	/* we are changing these functions to updated functions alloc_netdev_mqs()
  	* additionally there is a new parameter, name_assign_type = NET_NAME_UNKNOWN	 */
-	snull_devs[0] = alloc_netdev_mqs(sizeof(struct snull_priv), "sn%d", NET_NAME_UNKNOWN,
-			snull_setup, 1, 1);
-	snull_devs[1] = alloc_netdev_mqs(sizeof(struct snull_priv), "sn%d", NET_NAME_UNKNOWN,
-			snull_setup, 1, 1);
+	snull_devs[0] = alloc_netdev_mqs(sizeof(struct snull_priv), "sn%d",
+					 NET_NAME_UNKNOWN, snull_setup, 1, 1);
+	snull_devs[1] = alloc_netdev_mqs(sizeof(struct snull_priv), "sn%d",
+					 NET_NAME_UNKNOWN, snull_setup, 1, 1);
 	if (snull_devs[0] == NULL || snull_devs[1] == NULL) {
 		ret = -ENOMEM;
 		goto out;
@@ -681,7 +685,8 @@ static int __init snull_init(void)
 	for (i = 0; i < 2; i++) {
 		ret = register_netdev(snull_devs[i]);
 		if (ret)  {
-			printk(KERN_WARNING "snull: error %d registering device %s\n", ret, snull_devs[i]->name);
+			printk(KERN_WARNING "snull: error %d registering device %s\n",
+			       ret, snull_devs[i]->name);
 		ret = -ENODEV;
 		goto out;
 		}
