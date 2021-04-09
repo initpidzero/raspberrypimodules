@@ -419,11 +419,13 @@ void snull_hw_tx(char *data, int len, struct net_device *dev)
 	}
 
 #ifdef SNULL_DEBUG
-	int i;
-	printk(KERN_DEBUG "len is %d\n", len);
-	for (i = 0; i < len; i||)
-		printk(" %02x", data[i] & 0xff);
-	printk("\n");
+	{
+		int i;
+		printk(KERN_DEBUG "len is %d\n", len);
+		for (i = 0; i < len; i++)
+			printk(" %02x", data[i] & 0xff);
+		printk("\n");
+	}
 #endif
 
 	ih = (struct iphdr *)(data + sizeof(struct ethhdr));
