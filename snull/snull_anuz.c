@@ -293,6 +293,45 @@ static int snull_poll(struct napi_struct *napi, int budget)
 	return npackets;
 }
 
+/* printing details inside header ? */
+void printk_ip_packet(struct iphdr *ih, int dir)
+{
+	uint32_t temp1 = ntohl(ih->saddr);
+	uint32_t temp2 = ntohl(ih->daddr);
+
+	unsigned char *saddr = (unsigned char *)&temp1;
+	unsigned char *daddr = (unsigned char *)&temp2;
+
+	if (dir) {
+		printk("%d.%d.%d.%d:%05d\n -> %d.%d.%d.%d:%05d\n",
+			saddr[3], saddr[2], saddr[1], saddr[0],
+			ntohs(((struct tcphdr *)(ih + 1))->source),
+			daddr[3], daddr[2], daddr[1], daddr[0],
+			ntohs(((struct tcphdr *)(ih + 1))->dest));
+
+	} else {
+		printk("%d.%d.%d.%d:%05d\n -> %d.%d.%d.%d:%05d\n",
+			daddr[3], daddr[2], daddr[1], daddr[0],
+			ntohs(((struct tcphdr *)(ih + 1))->dest),
+			saddr[3], saddr[2], saddr[1], saddr[0],
+			ntohs(((struct tcphdr *)(ih + 1))->source));
+	}
+}
+
+void rx_debug(char *data, struct net_device *dev)
+{
+	struct iphdr *ih;
+	u32 *saddr, *daddr;
+	int dev_num = (dev == snull_devs[0]) ? 0 : 1;
+	/* ethdhr is 14 bytes, iphdr is aligned(but ethhdr is unaligned */
+	ih = (struct iphdr *)(data + sizeof(struct ethhdr));
+	saddr = &ih->saddr;
+	daddr = &ih->daddr;
+	printk("<<RX >>>\n");
+
+	printk_ip_packet(ih, dev_num);
+}
+
 /* send packet to upper layers with any additional information
  * This function is independent of source of data packet and len
  */
@@ -301,6 +340,7 @@ void snull_rx(struct net_device *dev, struct snull_packet *pkt)
 	struct sk_buff *skb;
 	struct snull_priv *priv = netdev_priv(dev);
 
+	rx_debug(pkt->data, dev);
 	/* The packet is recieved from the Tx medium
  	* build the skb around it.
  	*/
@@ -373,32 +413,6 @@ static void snull_regular_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	return;
 }
 
-/* printing details inside header ? */
-void printk_ip_packet(struct iphdr *ih, int dir)
-{
-	uint32_t temp1 = ntohl(ih->saddr);
-	uint32_t temp2 = ntohl(ih->daddr);
-
-	unsigned char *saddr = (unsigned char *)&temp1;
-	unsigned char *daddr = (unsigned char *)&temp2;
-
-	if (dir) {
-		printk("%d.%d.%d.%d:%05d\n -> %d.%d.%d.%d:%05d\n",
-			saddr[3], saddr[2], saddr[1], saddr[0],
-			ntohs(((struct tcphdr *)(ih + 1))->source),
-			daddr[3], daddr[2], daddr[1], daddr[0],
-			ntohs(((struct tcphdr *)(ih + 1))->dest));
-
-	} else {
-		printk("%d.%d.%d.%d:%05d\n -> %d.%d.%d.%d:%05d\n",
-			daddr[3], daddr[2], daddr[1], daddr[0],
-			ntohs(((struct tcphdr *)(ih + 1))->dest),
-			saddr[3], saddr[2], saddr[1], saddr[0],
-			ntohs(((struct tcphdr *)(ih + 1))->source));
-	}
-}
-
-
 /* transmit a low level packet */
 void snull_hw_tx(char *data, int len, struct net_device *dev)
 {
@@ -435,6 +449,7 @@ void snull_hw_tx(char *data, int len, struct net_device *dev)
 	saddr = &ih->saddr;
 	daddr = &ih->daddr;
 
+	printk("<< TX >>>\n");
 	printk_ip_packet(ih, dev_num);
 
 	((u8 *)saddr)[2] ^= 1; /* flip the third octet last bit */
@@ -560,7 +575,7 @@ int snull_open(struct net_device *dev)
  	* x is 0 or 1. First byte is '\0' to avoid multicast address
  	* (the first byte is odd in multicast). */
 	memcpy(dev->dev_addr, "\0SNUL0", ETH_ALEN);
-	if (dev == snull_devs[1]);
+	if (dev == snull_devs[1])
 		dev->dev_addr[ETH_ALEN - 1]++;
 	netif_start_queue(dev);
 	return 0;
