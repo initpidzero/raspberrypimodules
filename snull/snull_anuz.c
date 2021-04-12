@@ -430,6 +430,7 @@ void snull_hw_tx(char *data, int len, struct net_device *dev)
 	}
 #endif
 
+	/* ethdhr is 14 bytes, iphdr is aligned(but ethhdr is unaligned */
 	ih = (struct iphdr *)(data + sizeof(struct ethhdr));
 	saddr = &ih->saddr;
 	daddr = &ih->daddr;
@@ -531,7 +532,7 @@ static int snull_tx(struct sk_buff *skb, struct net_device *dev)
 	data = skb->data;
 	len = skb->len;
 
-	/* if the lenght is shorter than smallest packet size */
+	/* if the length is shorter than smallest packet size */
 	if (len < ETH_ZLEN) {
 		memset(shortpkt, 0, ETH_ZLEN); /* pad it with zeros */
 		memcpy(shortpkt, data, len);
@@ -546,7 +547,7 @@ static int snull_tx(struct sk_buff *skb, struct net_device *dev)
 	/* remember the skb, so that it can be freed at interrupt time */
 	priv->skb = skb;
 
-	/* actual deliver of data is device-specifi */
+	/* actual deliver of data is device-specific */
 	snull_hw_tx(data, len, dev);
 
 	return 0;
