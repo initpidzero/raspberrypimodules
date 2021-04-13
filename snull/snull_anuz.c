@@ -522,6 +522,8 @@ static void snull_napi_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	return;
 }
 
+/* for new kernels 5.6.x(? I think), the function prototype is changed */
+//void snull_tx_timeout(struct net_device *dev, unsigned int txqueue)
 void snull_tx_timeout(struct net_device *dev)
 {
 	struct snull_priv *priv = netdev_priv(dev);
