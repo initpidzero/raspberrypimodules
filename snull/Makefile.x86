@@ -1,10 +1,29 @@
-obj-m += snull_anuz.o
+# Comment/uncomment the following line to disable/enable debugging
+#DEBUG = y
 
-KERNEL_DIR ?= /mnt/caviar_green/code/rpi/linux
 
-all:
-	make -C $(KERNEL_DIR) \
-		SUBDIRS=$(PWD) modules
-clean:
-	make -C $(KERNEL_DIR) \
-		SUBDIRS=$(PWD) clean
+# Add your debugging flag (or not) to EXTRA_CFLAGS
+ifeq ($(DEBUG),y)
+  DEBFLAGS = -O -g -DSBULL_DEBUG # "-O" is needed to expand inlines
+else
+  DEBFLAGS = -O2
+endif
+
+EXTRA_CFLAGS += $(DEBFLAGS)
+EXTRA_CFLAGS += -I..
+
+ifneq ($(KERNELRELEASE),)
+# call from kernel build system
+
+obj-m	:= snull_anuz.o
+
+else
+
+#KERNELDIR ?= /lib/modules/$(shell uname -r)/build
+KERNELDIR ?= /home/atomar/development/tryouts/linux-stable 
+PWD       := $(shell pwd)
+
+default:
+	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules
+
+endif
