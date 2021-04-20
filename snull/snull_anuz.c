@@ -465,18 +465,18 @@ void snull_hw_tx(char *data, int len, struct net_device *dev)
 
 	dest = snull_devs[!dev_num];
 	priv = netdev_priv(dest); /* we want priv data structure of dest */
-	tx_buffer = snull_get_tx_buffer(dev);
+	tx_buffer = snull_get_tx_buffer(dev); /* tx buffer of src */
 	tx_buffer->datalen = len;
 	memcpy(tx_buffer->data, data, len);
-	snull_enqueue_buf(dest, tx_buffer);
+	snull_enqueue_buf(dest, tx_buffer); /* enqueue tx buffer to dest */
 	if (priv->rx_int_enabled) {
 		priv->status |= SNULL_RX_INTR;
-		snull_interrupt(0, dest, NULL);
+		snull_interrupt(0, dest, NULL); /* recieve on dest */
 	}
 
 	priv = netdev_priv(dev);
 	priv->tx_packetlen = len;
-	priv->tx_packetdata = data;
+	priv->tx_packetdata = data;/* src tx_packetdata */
 	priv->status |= SNULL_TX_INTR;
 	if (lockup && ((priv->stats.tx_packets + 1) % lockup) == 0) {
 		/* simulate a dropped transmit interrupt */
@@ -485,7 +485,7 @@ void snull_hw_tx(char *data, int len, struct net_device *dev)
 			(unsigned long)priv->stats.tx_packets);
 
 	} else
-		snull_interrupt(0, dev, NULL);
+		snull_interrupt(0, dev, NULL);/* tx on source */
 
 
 }
