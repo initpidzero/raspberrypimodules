@@ -229,7 +229,7 @@ static int snull_config(struct net_device *dev, struct ifmap *map)
 	}
 
 	/* ignore other fields */
-	return 0;
+        return 0;
 }
 
 /* Change hardware header */
@@ -334,6 +334,8 @@ void rx_debug(char *data, struct net_device *dev)
 
 /* send packet to upper layers with any additional information
  * This function is independent of source of data packet and len
+ * we are using interrupt driven technique, so this function is called when
+ * rx_interrupt is recieved.
  */
 void snull_rx(struct net_device *dev, struct snull_packet *pkt)
 {
@@ -351,8 +353,8 @@ void snull_rx(struct net_device *dev, struct snull_packet *pkt)
 		priv->stats.rx_dropped++;
 		goto out;
 	}
-	skb_reserve(skb, 2);
-	memcpy(skb_put(skb, pkt->datalen), pkt->data, pkt->datalen); /* skb_put() updates the end of the data pointer in the buffer and returns pointer to it */
+	skb_reserve(skb, 2); /* align on atleast 4-byte boundary, should this be NET_IP_ALIGN? */
+	memcpy(skb_put(skb, pkt->datalen), pkt->data, pkt->datalen); /* skb_put() updates the end of the data pointer in the buffer and returns pointer to it(data). pkt->datalen would be bytes between header and tail, or userdata length*/
 
 	/* write metadata, and then pass to recieve level */
 	skb->dev = dev;
@@ -360,7 +362,7 @@ void snull_rx(struct net_device *dev, struct snull_packet *pkt)
 	skb->ip_summed = CHECKSUM_UNNECESSARY; /* just ignore it */
 	priv->stats.rx_packets++;
 	priv->stats.rx_bytes += pkt->datalen;
-	netif_rx(skb); /* hand over packet to upper layers */
+	netif_rx(skb); /* hand over packet to upper layers. return status from this is ignored but it gives us idea of congestion level or if packet is dropped, this is better managed by napi*/
 
 out:
 	return;
@@ -370,6 +372,7 @@ out:
 /* what is pt_regs ofcourse these are copies of stack registers. */
 static void snull_regular_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
+        /* on a regular device status register gives details of interrupt type */
 	int statusword;
 	struct snull_priv *priv;
 	struct snull_packet *pkt = NULL;
@@ -480,7 +483,7 @@ void snull_hw_tx(char *data, int len, struct net_device *dev)
 	priv->status |= SNULL_TX_INTR;
 	if (lockup && ((priv->stats.tx_packets + 1) % lockup) == 0) {
 		/* simulate a dropped transmit interrupt */
-		netif_stop_queue(dev);
+		netif_stop_queue(dev); /* stop transmission while lockup is simulated*/
 		PDEBUG("simulating lockup at %ld, txp %ld\n", jiffies,
 			(unsigned long)priv->stats.tx_packets);
 
