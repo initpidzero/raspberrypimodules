@@ -73,6 +73,9 @@ static void (*snull_interrupt)(int, void *, struct pt_regs *);
 
 
 /* snull ioctls */
+/*
+ * struct ifreq is argument from user space
+ * */
 int snull_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 {
 	PDEBUG("ioctl\n");
@@ -83,7 +86,7 @@ int snull_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 struct net_device_stats *snull_stats(struct net_device *dev)
 {
 	struct snull_priv *priv = netdev_priv(dev);
-	return &priv->stats;
+	return &priv->stats;/* stats are used even when device is down */
 }
 
 /* fill ETH header since there is no APR function */
@@ -247,7 +250,13 @@ static int snull_header(struct sk_buff *skb, struct net_device *dev,
 
 /* NAPI driven polling rx funtion */
 /* budget: maximum packet allowed to pass to the kernel */
+/* ^^ it should be less than number of packets interface can store */
 /* the prototype of this function has changed */
+/* Interrupt driven functions can be slow if there are a lot of packets and
+ * the packets are constistently available(high throughput), for such high
+ * number of packets, it might be better to poll for packets at regular interval
+ * since there are always packets to be processed, thus CPU is not overloaded
+ * with processing too many interrupts */
 static int snull_poll(struct napi_struct *napi, int budget)
 {
 	int npackets = 0;
@@ -269,7 +278,7 @@ static int snull_poll(struct napi_struct *napi, int budget)
 			continue;
 		}
 
-		skb_reserve(skb, 2); /* align ip on 16B boundary */
+		skb_reserve(skb, 2); /* align ip on 16B boundary, ethernet header is 14 bytes and ehternet 2 bytes reserved in front of packet */
 		memcpy(skb_put(skb, pkt->datalen), pkt->data, pkt->datalen); /* put at the end */
 		skb->dev = dev;
 		skb->protocol = eth_type_trans(skb, dev);
@@ -369,7 +378,7 @@ out:
 }
 
 /* Interrupt handler for this interface */
-/* what is pt_regs ofcourse these are copies of stack registers. */
+/* what is pt_regs? Ofcourse these are copies of stack registers. */
 static void snull_regular_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
         /* on a regular device status register gives details of interrupt type */
