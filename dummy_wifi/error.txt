@@ -1,0 +1,20 @@
+/mnt/caviar_green/code/rpi/rip_modules/dummy_wifi/virtualwifi.c: In function ‘ndev_get_navi_context’:
+/mnt/caviar_green/code/rpi/rip_modules/dummy_wifi/virtualwifi.c:46:17: warning: passing argument 1 of ‘netdev_priv’ from incompatible pointer type [enabled by default]
+  return (struct navifly_ndev_priv_context *)netdev_priv(wiphy);
+                 ^
+In file included from ./include/net/cfg80211.h:16:0,
+                 from /mnt/caviar_green/code/rpi/rip_modules/dummy_wifi/virtualwifi.c:3:
+./include/linux/netdevice.h:2163:21: note: expected ‘const struct net_device *’ but argument is of type ‘struct wiphy *’
+ static inline void *netdev_priv(const struct net_device *dev)
+                     ^
+/mnt/caviar_green/code/rpi/rip_modules/dummy_wifi/virtualwifi.c: In function ‘navifly_scan_routine’:
+/mnt/caviar_green/code/rpi/rip_modules/dummy_wifi/virtualwifi.c:98:6: warning: ‘return’ with a value, in function returning void [enabled by default]
+      return -ERESTARTSYS;
+      ^
+/mnt/caviar_green/code/rpi/rip_modules/dummy_wifi/virtualwifi.c: In function ‘navifly_create_context’:
+/mnt/caviar_green/code/rpi/rip_modules/dummy_wifi/virtualwifi.c:356:2: warning: passing argument 1 of ‘ndev_get_navi_context’ from incompatible pointer type [enabled by default]
+  ndev_data = ndev_get_navi_context(ret->ndev);
+  ^
+/mnt/caviar_green/code/rpi/rip_modules/dummy_wifi/virtualwifi.c:44:2: note: expected ‘struct wiphy *’ but argument is of type ‘struct net_device *’
+ *ndev_get_navi_context(struct wiphy *wiphy)
+  ^
