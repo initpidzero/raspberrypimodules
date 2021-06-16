@@ -1,4 +1,4 @@
-obj-m += linkedlist_platform.o
+obj-m += dma_m2m.o
 
 KERNEL_DIR ?= /mnt/caviar_green/code/rpi/linux
 
@@ -11,5 +11,5 @@ clean:
 		ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- \
 		SUBDIRS=$(PWD) clean
 
-deploy : linkedlist_platform.ko
+deploy : dma_m2m.ko
 	scp $^ root@raspberrypi.local:
