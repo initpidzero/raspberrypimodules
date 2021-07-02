@@ -7,7 +7,6 @@
 #include <linux/fs.h> /* file operations fops */
 #include <linux/i2c.h> /* for i2c_driver, i2c_client, i2c_get/set_clientdata, */
 #include <linux/of.h> /* of_property_read_string() */
-#include <linux/uaccess.h> /* copy_from/to_user() */
 #include <linux/input-polldev.h> /* input_polled_dev, input_allocate_polled_device, input_register_polled_device */
 
 #define POWER_CTL 0x2D
@@ -22,33 +21,32 @@ struct ioaccel_dev {
 	struct input_polled_dev *polled_input; /* handle open() */
 };
 
-/*  files fops structure */
-static const struct file_operations ioaccel_fops = {
-	.owner = THIS_MODULE,
-	.read = ioaccel_read_file,
-	.write = ioaccel_write_file,
-};
-
 /* Called every 50 ms.
  */
 static void ioaccel_poll(struct input_polled_dev *pl_dev)
 {
-	struct ioacc_dev *ioaccel = pl_dev->private;
+	struct ioaccel_dev *ioaccel = pl_dev->private;
 	int val = 0;
 	/* read OUT_X_MSB register.
 	 * ioaccel->i2c_client can be used to get I2C address in
-	 * client->address; I2C Address is 0x1D. This address is obtained though
+	 * client->address; I2C Address is 0x1D/0x53. This address is obtained though
 	 * device tree binding and stored in struct i2c_client, this is sent to
 	 * probe by client pointer */
 	val = i2c_smbus_read_byte_data(ioaccel->i2c_client, OUT_X_MSB);
+
+	if ((val > 0xc0) && (val < 0xff)) {
+		input_event(ioaccel->polled_input->input, EV_KEY, KEY_1, 1);
+	} else {
+		input_event(ioaccel->polled_input->input, EV_KEY, KEY_1, 0);
+	}
+	input_sync(ioaccel->polled_input->input);
 }
 
 static int ioaccel_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
-	static int counter = 0;
 	struct ioaccel_dev *ioaccel;
 
-	pr_info("Hello there! \n");
+	dev_info(&client->dev, "Hello there! \n");
 	/* allocate memory of new device structure */
 	ioaccel = devm_kzalloc(&client->dev, sizeof(struct ioaccel_dev), GFP_KERNEL);
 	if (!ioaccel)
@@ -58,16 +56,19 @@ static int ioaccel_probe(struct i2c_client *client, const struct i2c_device_id *
 	/* attach ioaccel to i2c_client to be used in other functions */
 	i2c_set_clientdata(client, ioaccel);
 
+	/* set to measurement mode */
+	i2c_smbus_write_byte_data(client, POWER_CTL, PCTL_MEASURE);
+
 	/* allocated input_polled_dev */
 	ioaccel->polled_input = devm_input_allocate_polled_device(&client->dev);
 
 	/* init polled input device */
 	/* store pointer to I2C device/client  physical to logical mapping */
-	ioaccel->client = client; /* to exchange data with accel */
+	ioaccel->i2c_client = client; /* to exchange data with accel */
 	ioaccel->polled_input->private = ioaccel;  /* this can be recovered later */
 	ioaccel->polled_input->poll_interval = 50; /* call back interval */
 	ioaccel->polled_input->poll = ioaccel_poll; /* call back fn */
-	ioaccel->polled_input->dev.parent = &client->dev; /* physical/logical device mapping */
+	ioaccel->polled_input->input->dev.parent = &client->dev; /* physical/logical device mapping */
 	ioaccel->polled_input->input->name = "IOACCEL keyboard"; /* input sub-device parameters that will appear on log on registering the device */
 	ioaccel->polled_input->input->id.bustype = BUS_I2C; /* input sub-device parameters */
 
@@ -75,8 +76,9 @@ static int ioaccel_probe(struct i2c_client *client, const struct i2c_device_id *
 	set_bit(KEY_1, ioaccel->polled_input->input->keybit); /* KEY_1 event code */
 
 	/* register with input core */
+	/* global until unregistered */
 	input_register_polled_device(ioaccel->polled_input);
-	
+
 	return 0;
 }
 
@@ -84,13 +86,13 @@ static int ioaccel_remove(struct i2c_client *client)
 {
 	struct ioaccel_dev *ioaccel;
 	ioaccel = i2c_get_clientdata(client);
-	input_register_polled_device(ioaccel->polled_input);
-	pr_info("General Kenobi! \n");
+	input_unregister_polled_device(ioaccel->polled_input);
+	dev_info(&client->dev, "General Kenobi! \n");
 	return 0;
 }
 
 static const struct of_device_id my_of_ids[] = {
-	{ .compatible = "arrow,ioaccel"},
+	{ .compatible = "arrow,adxl345"},
 	{ },
 };
 
@@ -111,11 +113,12 @@ static struct i2c_driver ioaccel_driver = {
 		.name = "adxl345",
 		.of_match_table = my_of_ids,
 		.owner = THIS_MODULE,
-	}
+	},
 };
-static int ioaccel_init(void)
+
+static int __init ioaccel_init(void)
 {
-	int ret = module_i2c_driver(ioaccel_driver);
+	int ret = i2c_add_driver(&ioaccel_driver);
 
 	if (ret) {
 		pr_err("Platform register returned %d\n", ret);
@@ -129,7 +132,7 @@ static int ioaccel_init(void)
 static void __exit ioaccel_exit(void)
 {
 	pr_info("usual exit function \n");
-	
+
 	i2c_del_driver(&ioaccel_driver);
 }
 module_init(ioaccel_init);
@@ -137,4 +140,4 @@ module_exit(ioaccel_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("me@anuz.me");
-MODULE_DESCRIPTION("LED ON OFF MODULE");
+MODULE_DESCRIPTION("i2c accelerometer driver");
