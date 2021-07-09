@@ -147,6 +147,39 @@ static const struct adxl345_bus_ops adxl345_spi_bops = {
 	.read_block = adxl345_spi_read_block,
 };
 
+static struct attribute *adxl345_attributes[] = {
+        &dev_attr_rate.attr,
+        &dev_attr_position.attr,
+        &dev_attr_read.attr,
+        NULL
+};
+
+static const struct attribute_group_adxl345_attr_group = {
+        .attrs = adxl345_attributes,
+};
+
+static ssize_t adxl345_position_read(struct device *deve,
+                                     struct device_attribute *attr, char *buf)
+{
+        struct axis_triple axis;
+        ssize_t count;
+
+        struct adxl345 *ac = dev_get_drvdate(dev);
+        adxl345_get_triple(ac, &axis);
+
+        count = sprintf(buf, "(%d, %d, %d)\n", axis.x, axis.y, axis.z);
+
+        return count;
+}
+
+/* sysfs entries to access from user space.
+ * read sample rate, read data of three axes, last strored values of the axes */
+static DEVICE_ATTR(rate, 0664, adxl345_rate_show, adxl345_rate_store);
+static DEVICE_ATTR(position, S_IRUGO, adxl345_position_show, NULL);
+static DEVICE_ATTR(read, S_IRUGO, adxl345_position_read, NULL);
+
+/* EV_KEY will generated with 3 different event codes depending on the axes
+ * where tap is detected */
 static void adxl345_send_key_events(struct adxl345 *ac,
 			   struct adxl345_platform_data *pdata, int status,
 			   int press)
@@ -155,7 +188,7 @@ static void adxl345_send_key_events(struct adxl345 *ac,
 
 	for (i = ADXL_X_AXIS; i < = ADXL_Z_AXIS; i++) {
 		/*TODO decipher this */
-		if (status & (1 << (ADXL_Z_AXIS - 1)))
+		if (status & (1 << (ADXL_Z_AXIS - i)))
 			input_report_key(ac->input, pdata->ev_code_tap[i], press);
 	}
 }
