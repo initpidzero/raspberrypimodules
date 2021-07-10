@@ -124,6 +124,7 @@ static const struct adxl345_platform_data adxl345_default_init = {
 	.tap_axis_control = TAP_Z_EN,
 	.data_rate = 8,
 	.data_range = FULL_RES,
+        .ev_code_tap = {BUTTON_TOUCH, BUTTON_TOUCH, BUTTON_TOUCH}, /* EV_KEY x,y,z */
 	.fifo_mode = FIFO_BYPASS,
 	.watermark = 0,
 };
@@ -142,13 +143,145 @@ struct adxl345 {
 	const struct adxl345_bus_ops *bops;
 };
 
-/* init bus operations and send it to adxl345_probe */
-static const struct adxl345_bus_ops adxl345_spi_bops = {
-	.bustype = BUS_SPI,
-	.write = adxl345_spi_write,
-	.read = adxl345_spi_read,
-	.read_block = adxl345_spi_read_block,
-};
+/**
+ * get the adxl345 axis data
+ */
+static void adxl345_get_triple(struct adxl345 *ac, struct axis_triple *axis)
+{
+        __le16 buf[3]; /* this might be equivalent to short */
+
+        ac->bops->read_block(ac->dev, DATAX0, DATAZ1 - DATAX0 + 1, buf); /* starting address, size? */
+
+        ac->saved.x = sign_extend32(le16_to_cpu(buf[0], 12)); /* sign extend the value with 12th bit as sign bit */
+        axix->x = ac->saved.x;
+
+
+        ac->saved.y = sign_extend32(le16_to_cpu(buf[1], 12)); /* sign extend the value with 12th bit as sign bit */
+        axix->y = ac->saved.y;
+
+        ac->saved.z = sign_extend32(le16_to_cpu(buf[2], 12)); /* sign extend the value with 12th bit as sign bit */
+        axix->z = ac->saved.z;
+}
+
+/**
+ * EV_KEY will generated with 3 different event codes depending on the axes
+ * where tap is detected
+ * SINGLE_TAP event. check ACT_TAP_STATUS(0x2B) and TAP_* bits, if bits are
+ * enabled there is an event to report
+*/
+static void adxl345_send_key_events(struct adxl345 *ac,
+			   struct adxl345_platform_data *pdata, int status,
+			   int press)
+{
+	int i;
+
+	for (i = ADXL_X_AXIS; i < = ADXL_Z_AXIS; i++) {
+		/*TODO decipher this */
+		if (status & (1 << (ADXL_Z_AXIS - i)))
+			input_report_key(ac->input,
+                                         pdata->ev_code_tap[i], press);
+	}
+}
+
+/* single tap event */
+static void adxl345_do_tap(struct adxl345 *ac,
+			   struct adxl345_platform_data *pdata, int status)
+{
+	adxl345_send_key_events(ac, pdata, status, true);
+	input_sync(ac->input);
+	adxl345_send_key_events(ac, pdata, status, false);
+
+}
+
+/* threaded interrupt handler for single tap
+ * interrupt handler is executed inside a thread
+ * its allowed to block to communicated with i2c/spi devices */
+static  irqreturn_t adxl345_irq(int irq, void *handle)
+{
+	struct adxl345 *ac = handle;
+	struct adxl345_plaform_data *pdata = &ac->pdata;
+	int int_stat, tap_stat;
+
+	/* read ACT_TAP_STATUS before clearing interrupt
+	 * if TAP is disabled, don't read ACT_TAP_STATUS
+	 * read ACT_TAP_STATUS if any of the axes is enabled */
+	if (pdata->tap_axis_control & (TAP_X_EN | TAP_Y_EN | TAP_Z_EN))
+		tap_stat = AC_READ(ac, ACT_TAP_STATUS);
+	else
+		tap_stat = 0;
+
+	/* read register. The interrupt is cleared */
+	int_stat = AC_READ(ac, INT_SOURCE);
+
+	if (int_stat & SINGLE_TAP) {
+		dev_info(ac->dev, "single tap interrupt has occured\n");
+		adxl345_do_tap(ac, pdata, tap_stat); /* ACT_TAP_STATUS register */
+	}
+
+	input_sync(ac->input);
+
+	return IRQ_HANDLED;
+}
+
+static ssize_t adxl345_rate_show(struct device *dev,
+                                     struct device_attribute *attr, char *buf)
+{
+        struct adxl345 *ac = dev_get_drvdata(dev);
+        return sprintf(buf, "%u\n", RATE(ac->pdata.data_rate));
+}
+
+static ssize_t adxl345_rate_store(struct device *dev,
+                                     struct device_attribute *attr, char *buf)
+{
+        struct adxl345 *ac = dev_get_drvdata(dev);
+        u8 val;
+        int error;
+
+        /* transform the array into u8 values */
+        error = kstrtou8(buf, 10, &val); /* This is for one byte */
+        if (error)
+                return error;
+
+        /*  low power mode low_power_mode = 1 but higher noise */
+        ac->pdata.data_rate = RATE(val);
+        AC_WRITE(ac, ac->pdata.data_rate |
+                 (ac->pdata.low_power_mode ? LOW_POWER : 0));
+
+        return count;
+}
+
+static ssize_t adxl345_position_show(struct device *dev,
+                                     struct device_attribute *attr, char *buf)
+{
+        ssize_t count;
+
+        struct adxl345 *ac = dev_get_drvdate(dev);
+
+        count = sprintf(buf, "(%d, %d, %d)\n", ac->saved.x,
+                        ac->saved.y, ac->saved.z);
+
+        return count;
+}
+
+static ssize_t adxl345_position_read(struct device *dev,
+                                     struct device_attribute *attr, char *buf)
+{
+        struct axis_triple axis;
+        ssize_t count;
+
+        struct adxl345 *ac = dev_get_drvdate(dev);
+        adxl345_get_triple(ac, &axis);
+
+        count = sprintf(buf, "(%d, %d, %d)\n", axis.x, axis.y, axis.z);
+
+        return count;
+}
+
+/* sysfs entries to access from user space.
+ * read sample rate, read data of three axes, last strored values of the axes */
+static DEVICE_ATTR(rate, 0664, adxl345_rate_show, adxl345_rate_store);
+static DEVICE_ATTR(position, S_IRUGO, adxl345_position_show, NULL);
+static DEVICE_ATTR(read, S_IRUGO, adxl345_position_read, NULL);
 
 static struct attribute *adxl345_attributes[] = {
         &dev_attr_rate.attr,
@@ -187,120 +320,14 @@ static int adxl345_spi_read_block(struct device *dev, unsigned char reg,
         return (status < 0) ? status : 0;
 }
 
-/**
- * get the adxl345 axis data
- */
-static void adxl345_get_triple(struct adxl345 *ac, struct axis_triple *axis)
-{
-        __le16 buf[3];
+/* init bus operations and send it to adxl345_probe */
+static const struct adxl345_bus_ops adxl345_spi_bops = {
+	.bustype = BUS_SPI,
+	.write = adxl345_spi_write,
+	.read = adxl345_spi_read,
+	.read_block = adxl345_spi_read_block,
+};
 
-        ac->bops->read_block(ac->dev, DATAX0, DATAZ1 - DATAX0 + 1, buf); /* starting address, size? */
-
-        ac->saved.x = sign_extend32(le16_to_cpu(buf[0], 12)); /* sign extend the value with 12th bit as sign bit */
-        axix->x = ac->saved.x;
-
-
-        ac->saved.y = sign_extend32(le16_to_cpu(buf[1], 12)); /* sign extend the value with 12th bit as sign bit */
-        axix->y = ac->saved.y;
-
-        ac->saved.z = sign_extend32(le16_to_cpu(buf[2], 12)); /* sign extend the value with 12th bit as sign bit */
-        axix->z = ac->saved.z;
-}
-
-static ssize_t adxl345_position_read(struct device *dev,
-                                     struct device_attribute *attr, char *buf)
-{
-        struct axis_triple axis;
-        ssize_t count;
-
-        struct adxl345 *ac = dev_get_drvdate(dev);
-        adxl345_get_triple(ac, &axis);
-
-        count = sprintf(buf, "(%d, %d, %d)\n", axis.x, axis.y, axis.z);
-
-        return count;
-}
-
-/* sysfs entries to access from user space.
- * read sample rate, read data of three axes, last strored values of the axes */
-static DEVICE_ATTR(rate, 0664, adxl345_rate_show, adxl345_rate_store);
-static DEVICE_ATTR(position, S_IRUGO, adxl345_position_show, NULL);
-static DEVICE_ATTR(read, S_IRUGO, adxl345_position_read, NULL);
-
-/* EV_KEY will generated with 3 different event codes depending on the axes
- * where tap is detected */
-static void adxl345_send_key_events(struct adxl345 *ac,
-			   struct adxl345_platform_data *pdata, int status,
-			   int press)
-{
-	int i;
-
-	for (i = ADXL_X_AXIS; i < = ADXL_Z_AXIS; i++) {
-		/*TODO decipher this */
-		if (status & (1 << (ADXL_Z_AXIS - i)))
-			input_report_key(ac->input, pdata->ev_code_tap[i], press);
-	}
-}
-
-/* single tap event */
-static void adxl345_do_tap(struct adxl345 *ac,
-			   struct adxl345_platform_data *pdata, int status)
-{
-	adxl345_send_key_events(ac, pdata, status, true);
-	input_sync(ac->input);
-	adxl345_send_key_events(ac, pdata, status, false);
-
-}
-/* threaded interrupt handler for single tap
- * interrupt handler is executed inside a thread
- * its allowed to block to communicated with i2c/spi devices */
-static  irqreturn_t adxl345_irq(int irq, void *handle)
-{
-	struct adxl345 *ac = handle;
-	struct adxl345_plaform_data *pdata = &ac->pdata;
-	int int_stat, tap_stat;
-
-	/* read ACT_TAP_STATUS before clearing interrupt
-	 * if TAP is disabled, don't read ACT_TAP_STATUS
-	 * read ACT_TAP_STATUS if any of the axes is enabled */
-	if (pdata->tap_axis_control & (TAP_X_EN | TAP_Y_EN | TAP_Z_EN))
-		tap_stat = AC_READ(ac, ACT_TAP_STATUS);
-	else
-		tap_stat = 0;
-
-	/* read register. The interrupt is cleared */
-	int_stat = AC_READ(ac, INT_SOURCE);
-
-	if (int_stat & SINGLE_TAP) {
-		dev_info(ac->dev, "single tap interrupt has occured\n");
-		adxl345_do_tap(ac, pdata, tap_stat);
-	}
-
-	input_sync(ac->input);
-
-	return IRQ_HANDLED;
-}
-
-/* Called every 50 ms.
- */
-static void adxl345_poll(struct input_polled_dev *pl_dev)
-{
-	struct adxl345_dev *ioaccel = pl_dev->private;
-	int val = 0;
-	/* read OUT_X_MSB register.
-	 * adxl345->i2c_client can be used to get I2C address in
-	 * client->address; I2C Address is 0x1D/0x53. This address is obtained though
-	 * device tree binding and stored in struct i2c_client, this is sent to
-	 * probe by client pointer */
-	val = i2c_smbus_read_byte_data(adxl345->i2c_client, OUT_X_MSB);
-
-	if ((val > 0xc0) && (val < 0xff)) {
-		input_event(adxl345->polled_input->input, EV_KEY, KEY_1, 1);
-	} else {
-		input_event(adxl345->polled_input->input, EV_KEY, KEY_1, 0);
-	}
-	input_sync(adxl345->polled_input->input);
-}
 
 static int adxl345_probe(struct device *dev, const struct adxl345_bus_ops *bops)
 {
@@ -313,24 +340,47 @@ static int adxl345_probe(struct device *dev, const struct adxl345_bus_ops *bops)
 	/* we need a platform data structure */
 	const struct adxl345_platform_data *pdata;
 
+        int err;
+        u8 revid;
+
 	dev_info(dev, "Hello there! \n");
 	/* allocate memory of new device structure */
 	ac = devm_kzalloc(dev, sizeof(struct adxl345), GFP_KERNEL);
-	if (!ac)
-		return -ENOMEM;
+	if (!ac) {
+                dev_err(dev, "Failed to kzalloc()\n")
+		err = -ENOMEM;
+                goto err_out;
+        }
 
 	/* allocated input_dev */
 	input_dev = devm_input_allocate_device(dev);
-	if (!input_dev)
-		return -ENODEV; /*TODO */
+	if (!input_dev){
+                dev_err(dev, "Failed to input_allocate\n")
+		err = -ENOMEM;
+                goto err_out;
+        }
 
 	/* store platform data */
-	pdata = &adxl345_default_init;
-	ac->pdata = data;
-	ac->input = input_dev; /* input device in private ds */
-	ac->dev = dev; /* spi->dev */
+        pdata = &adxl345_default_init; /* const platform data */
+        ac->pdata = *pdata;
+        pdata = &ac->pdata; /* change address pointer */
 
-	ac->bops = bops; /* spi operations */
+        ac->input = input_dev; /* input device in private ds */
+        ac->dev = dev; /* spi->dev */
+
+        ac->bops = bops; /* spi operations */
+
+        revid = AC_READ(ac, DEVID);
+        dev->infor(dev, "DEVID: %d\n", revid);
+
+        if (revid == ID_ADXL345)
+                dev_info(dev, "Device found ADXL345\n");
+        else {
+                err = -ENODEV;
+                dev_info(dev, "Device Not found \n");
+                goto err_out;
+        }
+        snprintf(ac->phys, sizeof(ac->phys), "%s/input0", dev_name(dev));
 
 	/* set device name */
 	input_dev->name = "ADXL345 accelerometer";
@@ -356,22 +406,39 @@ static int adxl345_probe(struct device *dev, const struct adxl345_bus_ops *bops)
 
 	/* get gpio desc, set to input */
 	ac->gpio = devm_gpiod_get_index(dev, ADXL345_GPIO_NAME, 0, GPIOD_IN);
+        if (IS_ERR(ac->gpio)) {
+                dev_err(dev, "gpio get index failed \n");
+                err = PTR_ERR(ac->gpio); /* PTR to int */
+                goto err_out;
+        }
 
 	/* get linux irq number of gpio interrupt */
 	ac->irq = gpiod_to_irq(ac->gpio);
+	if (ac->irq < 0) {
+                dev_err(dev, "Failed to get irq from gpiod \n")
+		err = ac->irq;
+                goto err_out;
+        }
+
 
 	/*request threaded interrupt */
-	devm_request_threaded_irq(input_dev->dev.parent, ac->irq, NULL,
+	err = devm_request_threaded_irq(input_dev->dev.parent, ac->irq, NULL,
 				  adxl345_irq,
 				  IRQF_TRIGGER_HIGH | IRQF_ONESHOT,
 				  dev_name(dev), ac);
+        if (err)
+                goto err_out;
 
 	/* create a group of sysfs enteries */
-	sysfs_create_group(&dev->kobj, &adxl345_attr_group);
+	err = sysfs_create_group(&dev->kobj, &adxl345_attr_group);
+        if (err)
+                goto err_out;
 
 	/* register with input core */
 	/* global until unregistered */
-	input_register_device(input_dev);
+	err = input_register_device(input_dev);
+        if (err)
+                goto err_remove_attr;
 
 	/* initilise adxl345 registers */
 
@@ -403,6 +470,13 @@ static int adxl345_probe(struct device *dev, const struct adxl345_bus_ops *bops)
 	AC_WRITE(ac, POWER_CTL, PCTL_MEASURE);
 
 	return ac;
+
+err_remove_attr:
+        sysfs_remove_attr(&dev->kobj, &adxl345_attr_group);
+
+        /* we will return an ERR PTR */
+err_out:
+        return ERR_PTR(err);
 }
 
 static int adxl345_spi_probe(struct spi_device *spi)
