@@ -14,14 +14,14 @@
 /* macros for specific command byte spi_read, _write, _write_then_read() */
 #define ADXL345_CMD_MULTB	(1 << 6)
 #define ADXL345_CMD_READ	(1 << 7)
-#define ADXL345_WRITECMD(reg)	(reg & 0x3F)
+#define ADXL345_WRITECMD(reg)	(reg & 0x3F) /* consider only 6 bits */
 #define ADXL345_READCMD(reg)	(ADXL345_CMD_READ | (reg & 0x3F))
-#define ADXL345_READMB_CMD(reg)	(ADXL345_CMD_READ | ADXL345_CMD_MULTB |(reg & 0x3F))
+#define ADXL345_READMB_CMD(reg)	(ADXL345_CMD_READ | ADXL345_CMD_MULTB | (reg & 0x3F))
 
 /* registers */
 #define DEVID		0x00 /* R */
-#define THRESH_TAP	0x29 /* RW */
-#define DUR		0x33 /* RW TAP Duration */
+#define THRESH_TAP	0x1D /* RW */
+#define DUR		0x21 /* RW TAP Duration */
 #define TAP_AXES	0x2A /* RW Single/Double Tap Axis control */
 #define ACT_TAP_STATUS	0x2B /* R Source of TAP */
 #define BW_RATE		0x2C /* RW Data rate and power mode ctl */
@@ -42,6 +42,9 @@
 #define ID_ADXL345	0xE5 /* device id for adxl */
 
 #define SINGLE_TAP	(1 << 6) /* Works for INT_* registers */
+/* if SUPPRESS bit is set, double tap is suppressed if acc value is
+ * above threshold during tap_latency period, which is after first tab
+ * but before opening of second window */
 #define TAP_X_EN	(1 << 2) /* enable X axis in TAP_AXES register */
 #define TAP_Y_EN	(1 << 1) /* enable Y axis in TAP_AXES register */
 #define TAP_Z_EN	(1 << 0) /* enable Z axis in TAP_AXES register */
@@ -88,7 +91,7 @@ struct adxl345_bus_ops {
 	int (*write)(struct device *, unsigned char, unsigned char);
 };
 
-struct axix_triple {
+struct axis_triple {
 	int x;
 	int y;
 	int z;
@@ -96,9 +99,9 @@ struct axix_triple {
 
 /*driver specific information */
 struct adxl345_platform_data {
-	u8 low_power_mode;
-	u8 tap_threshold;
-	u8 tap_duration;
+	u8 low_power_mode; /* set for low power but higher noise */
+	u8 tap_threshold; /* 62.5 mg/LSB 0xFF = +16g */
+	u8 tap_duration; /* min time value for tap to register 625 us/LSB */
 	/* we are skipping some of the MACROS with ADXL_ */
 	u8 tap_axis_control;
 	u8 data_rate;
@@ -158,7 +161,53 @@ static const struct attribute_group_adxl345_attr_group = {
         .attrs = adxl345_attributes,
 };
 
-static ssize_t adxl345_position_read(struct device *deve,
+/**
+ * adxl345_spi_read_block - read multiple registers
+ * @reg: first register address to read
+ * @count: number of registers to read
+ * @buf: store values retreived from registers
+ */
+static int adxl345_spi_read_block(struct device *dev, unsigned char reg,
+                                  int count, void *buf)
+{
+        struct spi_device *spi = to_spi_device(dev); /* container_of to get spi_device struct */
+        ssize_t status;
+
+        /* add MB flags to the reading */
+        reg = ADXL345_READMB_CMD(reg); /* set 7th and 8th bit ?*/
+
+        /* write byte stored in reg(address with MB)
+         * read count bytes (from successive addresses)
+         * and store them to buf */
+        /* send SPI bus a command byte of first reg to read(A0 to A5/ 6 bits)
+         * set MB bit for multibyte reading and R bit for reading
+         * read six register */
+        status = spi_write_then_read(spi, &reg, 1, buf, count);
+
+        return (status < 0) ? status : 0;
+}
+
+/**
+ * get the adxl345 axis data
+ */
+static void adxl345_get_triple(struct adxl345 *ac, struct axis_triple *axis)
+{
+        __le16 buf[3];
+
+        ac->bops->read_block(ac->dev, DATAX0, DATAZ1 - DATAX0 + 1, buf); /* starting address, size? */
+
+        ac->saved.x = sign_extend32(le16_to_cpu(buf[0], 12)); /* sign extend the value with 12th bit as sign bit */
+        axix->x = ac->saved.x;
+
+
+        ac->saved.y = sign_extend32(le16_to_cpu(buf[1], 12)); /* sign extend the value with 12th bit as sign bit */
+        axix->y = ac->saved.y;
+
+        ac->saved.z = sign_extend32(le16_to_cpu(buf[2], 12)); /* sign extend the value with 12th bit as sign bit */
+        axix->z = ac->saved.z;
+}
+
+static ssize_t adxl345_position_read(struct device *dev,
                                      struct device_attribute *attr, char *buf)
 {
         struct axis_triple axis;
@@ -370,7 +419,7 @@ static int adxl345_spi_probe(struct spi_device *spi)
 	return 0;
 }
 
-static int adxl345_remove(struct i2c_client *client)
+static int adxl345_spi_remove(struct i2c_client *client)
 {
 	struct adxl345_dev *ioaccel;
 	adxl345 = i2c_get_clientdata(client);
@@ -386,17 +435,17 @@ static const struct of_device_id my_of_ids[] = {
 
 MODULE_DEVICE_TABLE(of, my_of_ids);
 
-static const struct i2c_device_id i2c_ids[] = {
+static const struct spi_device_id adxl345_ids[] = {
 	{ .name = "adxl345", },
 	{ }
 };
 
-MODULE_DEVICE_TABLE(i2c, i2c_ids);
+MODULE_DEVICE_TABLE(spi, adxl345_ids);
 
 static struct i2c_driver adxl345_driver = {
-	.probe = adxl345_probe,
-	.remove = adxl345_remove,
-	.id_table = i2c_ids,
+	.probe = adxl345_spi_probe,
+	.remove = adxl345_spi_remove,
+	.id_table = adxl345_ids,
 	.driver = {
 		.name = "adxl345",
 		.of_match_table = my_of_ids,
@@ -404,27 +453,7 @@ static struct i2c_driver adxl345_driver = {
 	},
 };
 
-static int __init adxl345_init(void)
-{
-	int ret = i2c_add_driver(&adxl345_driver);
-
-	if (ret) {
-		pr_err("Platform register returned %d\n", ret);
-		return ret;
-	}
-
-	pr_info("usual init function \n");
-	return 0;
-}
-
-static void __exit adxl345_exit(void)
-{
-	pr_info("usual exit function \n");
-
-	i2c_del_driver(&adxl345_driver);
-}
-module_init(adxl345_init);
-module_exit(adxl345_exit);
+module_spi_driver(adxl345_driver);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("me@anuz.me");
