@@ -295,6 +295,22 @@ static const struct attribute_group_adxl345_attr_group = {
 };
 
 /**
+ * adxl345_spi_write - write reg address and value to store in it
+ * @reg: register address to write
+ * @val: value to write in reg
+ */
+static int adxl345_spi_write(struct device *dev, unsigned char reg,
+                                  unsigned char val)
+{
+        struct spi_device *spi = to_spi_device(dev); /* container_of to get spi_device struct */
+        u8 buf[2];
+        buf[0] = ADXL345_WRITECMD(reg);
+        buf[1] = val;
+
+        return spi_write(spi, buf, sizeof(buf));
+}
+
+/**
  * adxl345_spi_read - write register address and read its value
  * @reg: register address to read
  */
