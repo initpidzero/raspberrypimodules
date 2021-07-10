@@ -522,12 +522,13 @@ static int adxl345_spi_probe(struct spi_device *spi)
 	return 0;
 }
 
-static int adxl345_spi_remove(struct i2c_client *client)
+static int adxl345_spi_remove(struct spi_device *spi)
 {
-	struct adxl345_dev *ioaccel;
-	adxl345 = i2c_get_clientdata(client);
-	input_unregister_polled_device(adxl345->polled_input);
+	struct adxl345 *ac = spi_get_drvdata(spi) ;
 	dev_info(&client->dev, "General Kenobi! \n");
+        sysfs_remove_attr(&ac->dev->kobj, &adxl345_attr_group);
+	input_unregister_device(ac->input);
+	AC_WRITE(ac, POWER_CTL, PCTL_STANDBY);
 	return 0;
 }
 
