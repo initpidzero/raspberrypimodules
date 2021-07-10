@@ -104,17 +104,17 @@ struct adxl345_platform_data {
 	u8 tap_duration; /* min time value for tap to register 625 us/LSB */
 	/* we are skipping some of the MACROS with ADXL_ */
 	u8 tap_axis_control;
-	u8 data_rate;
+	u8 data_rate; /* rate is 3200 / (2 ^ (15 - x)) default is 0xA = 100 Hz*/
 
 	/*resolution granularity? */
 #define ADXL_RANGE_PM_2G	0
 #define ADXL_RANGE_PM_4G	1
 #define ADXL_RANGE_PM_8G	2
 #define ADXL_RANGE_PM_16G	3
-	u8 data_range;
-	u32 ev_code_tap[3];
-	u8 fifo_mode;
-	u8 watermark;
+	u8 data_range; /* set: full range is 4mg/LSB. clear: 10 bit mode range determines g-Range and scale factor*/
+	u32 ev_code_tap[3]; /* btn,key code, tap_axis_control to control this */
+	u8 fifo_mode; /* FIFO stop after 32 values, STREAM: overwrite after 32 values */
+	u8 watermark; /* store upto watermark value before triggering the FIFO interrupt */
 
 };
 
