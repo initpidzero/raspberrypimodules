@@ -295,6 +295,20 @@ static const struct attribute_group_adxl345_attr_group = {
 };
 
 /**
+ * adxl345_spi_read - write register address and read its value
+ * @reg: register address to read
+ */
+static int adxl345_spi_read(struct device *dev, unsigned char reg)
+{
+        struct spi_device *spi = to_spi_device(dev); /* container_of to get spi_device struct */
+        u8 cmd;
+
+        cmd = ADXL345_READCMD(reg);
+
+        return spi_w8r8(spi, cmd); /* write the command and read the result */
+}
+
+/**
  * adxl345_spi_read_block - read multiple registers
  * @reg: first register address to read
  * @count: number of registers to read
@@ -327,7 +341,6 @@ static const struct adxl345_bus_ops adxl345_spi_bops = {
 	.read = adxl345_spi_read,
 	.read_block = adxl345_spi_read_block,
 };
-
 
 static int adxl345_probe(struct device *dev, const struct adxl345_bus_ops *bops)
 {
