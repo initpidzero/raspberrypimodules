@@ -564,4 +564,4 @@ module_spi_driver(adxl345_driver);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("me@anuz.me");
-MODULE_DESCRIPTION("i2c accelerometer driver");
+MODULE_DESCRIPTION("spi accelerometer driver");
