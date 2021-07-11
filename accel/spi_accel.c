@@ -230,7 +230,7 @@ static ssize_t adxl345_rate_show(struct device *dev,
 
 static ssize_t adxl345_rate_store(struct device *dev,
                                      struct device_attribute *attr,
-				     char *buf, size_t count)
+				     const char *buf, size_t count)
 {
         struct adxl345 *ac = dev_get_drvdata(dev);
         u8 val;
