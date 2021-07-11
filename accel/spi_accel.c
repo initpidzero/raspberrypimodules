@@ -3,12 +3,10 @@
 ** This file is distibuted under GPLv2
 **/
 
-#include <linux/module.h>
-#include <linux/fs.h> /* file operations fops */
-#include <linux/of.h> /* of_property_read_string() */
-#include <linux/of_gpio.h>
-#include <linux/spi/spi.h>
 #include <linux/input.h>
+#include <linux/module.h>
+#include <linux/spi/spi.h>
+#include <linux/of_gpio.h>
 #include <linux/interrupt.h>
 
 /* macros for specific command byte spi_read, _write, _write_then_read() */
@@ -67,7 +65,7 @@
 /* Setting 0 in sample bits sets the watermark status bit in INT_SOURCE reg */
 /* Samples are number of FIFO enteries needed to trigger watermark interrupt.
  * Applicable to FIFO_FIFO, FIFO_STREAM */
-#define SAMPLES(x)	((x) & 0x1F) / * only 5 bits are sample bits */
+#define SAMPLES(x)	((x) & 0x1F)
 
 /* FIFO_STATUS stores how many entries are available to read */
 /* read clears FIFO levels Max entries 32 */
@@ -124,7 +122,7 @@ static const struct adxl345_platform_data adxl345_default_init = {
 	.tap_axis_control = TAP_Z_EN,
 	.data_rate = 8,
 	.data_range = FULL_RES,
-        .ev_code_tap = {BUTTON_TOUCH, BUTTON_TOUCH, BUTTON_TOUCH}, /* EV_KEY x,y,z */
+        .ev_code_tap = {BTN_TOUCH, BTN_TOUCH, BTN_TOUCH}, /* EV_KEY x,y,z */
 	.fifo_mode = FIFO_BYPASS,
 	.watermark = 0,
 };
@@ -152,15 +150,15 @@ static void adxl345_get_triple(struct adxl345 *ac, struct axis_triple *axis)
 
         ac->bops->read_block(ac->dev, DATAX0, DATAZ1 - DATAX0 + 1, buf); /* starting address, size? */
 
-        ac->saved.x = sign_extend32(le16_to_cpu(buf[0], 12)); /* sign extend the value with 12th bit as sign bit */
-        axix->x = ac->saved.x;
+        ac->saved.x = sign_extend32(le16_to_cpu(buf[0]), 12); /* sign extend the value with 12th bit as sign bit */
+        axis->x = ac->saved.x;
 
 
-        ac->saved.y = sign_extend32(le16_to_cpu(buf[1], 12)); /* sign extend the value with 12th bit as sign bit */
-        axix->y = ac->saved.y;
+        ac->saved.y = sign_extend32(le16_to_cpu(buf[1]), 12); /* sign extend the value with 12th bit as sign bit */
+        axis->y = ac->saved.y;
 
-        ac->saved.z = sign_extend32(le16_to_cpu(buf[2], 12)); /* sign extend the value with 12th bit as sign bit */
-        axix->z = ac->saved.z;
+        ac->saved.z = sign_extend32(le16_to_cpu(buf[2]), 12); /* sign extend the value with 12th bit as sign bit */
+        axis->z = ac->saved.z;
 }
 
 /**
@@ -175,7 +173,7 @@ static void adxl345_send_key_events(struct adxl345 *ac,
 {
 	int i;
 
-	for (i = ADXL_X_AXIS; i < = ADXL_Z_AXIS; i++) {
+	for (i = ADXL_X_AXIS; i <= ADXL_Z_AXIS; i++) {
 		/*TODO decipher this */
 		if (status & (1 << (ADXL_Z_AXIS - i)))
 			input_report_key(ac->input,
@@ -199,7 +197,7 @@ static void adxl345_do_tap(struct adxl345 *ac,
 static  irqreturn_t adxl345_irq(int irq, void *handle)
 {
 	struct adxl345 *ac = handle;
-	struct adxl345_plaform_data *pdata = &ac->pdata;
+	struct adxl345_platform_data *pdata = &ac->pdata;
 	int int_stat, tap_stat;
 
 	/* read ACT_TAP_STATUS before clearing interrupt
@@ -231,7 +229,8 @@ static ssize_t adxl345_rate_show(struct device *dev,
 }
 
 static ssize_t adxl345_rate_store(struct device *dev,
-                                     struct device_attribute *attr, char *buf)
+                                     struct device_attribute *attr,
+				     char *buf, size_t count)
 {
         struct adxl345 *ac = dev_get_drvdata(dev);
         u8 val;
@@ -244,18 +243,20 @@ static ssize_t adxl345_rate_store(struct device *dev,
 
         /*  low power mode low_power_mode = 1 but higher noise */
         ac->pdata.data_rate = RATE(val);
-        AC_WRITE(ac, ac->pdata.data_rate |
+        AC_WRITE(ac, BW_RATE, ac->pdata.data_rate |
                  (ac->pdata.low_power_mode ? LOW_POWER : 0));
 
         return count;
 }
+
+static DEVICE_ATTR(rate, 0664, adxl345_rate_show, adxl345_rate_store);
 
 static ssize_t adxl345_position_show(struct device *dev,
                                      struct device_attribute *attr, char *buf)
 {
         ssize_t count;
 
-        struct adxl345 *ac = dev_get_drvdate(dev);
+        struct adxl345 *ac = dev_get_drvdata(dev);
 
         count = sprintf(buf, "(%d, %d, %d)\n", ac->saved.x,
                         ac->saved.y, ac->saved.z);
@@ -269,7 +270,7 @@ static ssize_t adxl345_position_read(struct device *dev,
         struct axis_triple axis;
         ssize_t count;
 
-        struct adxl345 *ac = dev_get_drvdate(dev);
+        struct adxl345 *ac = dev_get_drvdata(dev);
         adxl345_get_triple(ac, &axis);
 
         count = sprintf(buf, "(%d, %d, %d)\n", axis.x, axis.y, axis.z);
@@ -279,7 +280,6 @@ static ssize_t adxl345_position_read(struct device *dev,
 
 /* sysfs entries to access from user space.
  * read sample rate, read data of three axes, last strored values of the axes */
-static DEVICE_ATTR(rate, 0664, adxl345_rate_show, adxl345_rate_store);
 static DEVICE_ATTR(position, S_IRUGO, adxl345_position_show, NULL);
 static DEVICE_ATTR(read, S_IRUGO, adxl345_position_read, NULL);
 
@@ -290,7 +290,7 @@ static struct attribute *adxl345_attributes[] = {
         NULL
 };
 
-static const struct attribute_group_adxl345_attr_group = {
+static const struct attribute_group adxl345_attr_group = {
         .attrs = adxl345_attributes,
 };
 
@@ -358,7 +358,7 @@ static const struct adxl345_bus_ops adxl345_spi_bops = {
 	.read_block = adxl345_spi_read_block,
 };
 
-static int adxl345_probe(struct device *dev, const struct adxl345_bus_ops *bops)
+struct adxl345  *adxl345_probe(struct device *dev, const struct adxl345_bus_ops *bops)
 {
 	/* private ds */
 	struct adxl345 *ac;
@@ -376,7 +376,7 @@ static int adxl345_probe(struct device *dev, const struct adxl345_bus_ops *bops)
 	/* allocate memory of new device structure */
 	ac = devm_kzalloc(dev, sizeof(struct adxl345), GFP_KERNEL);
 	if (!ac) {
-                dev_err(dev, "Failed to kzalloc()\n")
+                dev_err(dev, "Failed to kzalloc()\n");
 		err = -ENOMEM;
                 goto err_out;
         }
@@ -384,7 +384,7 @@ static int adxl345_probe(struct device *dev, const struct adxl345_bus_ops *bops)
 	/* allocated input_dev */
 	input_dev = devm_input_allocate_device(dev);
 	if (!input_dev){
-                dev_err(dev, "Failed to input_allocate\n")
+                dev_err(dev, "Failed to input_allocate\n");
 		err = -ENOMEM;
                 goto err_out;
         }
@@ -400,7 +400,7 @@ static int adxl345_probe(struct device *dev, const struct adxl345_bus_ops *bops)
         ac->bops = bops; /* spi operations */
 
         revid = AC_READ(ac, DEVID);
-        dev->infor(dev, "DEVID: %d\n", revid);
+        dev_info(dev, "DEVID: %d\n", revid);
 
         if (revid == ID_ADXL345)
                 dev_info(dev, "Device found ADXL345\n");
@@ -444,11 +444,12 @@ static int adxl345_probe(struct device *dev, const struct adxl345_bus_ops *bops)
 	/* get linux irq number of gpio interrupt */
 	ac->irq = gpiod_to_irq(ac->gpio);
 	if (ac->irq < 0) {
-                dev_err(dev, "Failed to get irq from gpiod \n")
+                dev_err(dev, "Failed to get irq from gpiod \n");
 		err = ac->irq;
                 goto err_out;
         }
 
+	dev_info(dev, "irq = %d \n", ac->irq);
 
 	/*request threaded interrupt */
 	err = devm_request_threaded_irq(input_dev->dev.parent, ac->irq, NULL,
@@ -472,8 +473,8 @@ static int adxl345_probe(struct device *dev, const struct adxl345_bus_ops *bops)
 	/* initilise adxl345 registers */
 
 	/* tap threshold and duration */
-	AC_WRITE(ac, THRES_TAP, pdata->tap_threshold);
-	AC_WRITE(ac, DUR, pdata->tap_threshold);
+	AC_WRITE(ac, THRESH_TAP, pdata->tap_threshold);
+	AC_WRITE(ac, DUR, pdata->tap_duration);
 
 	/* set tap axis */
 	AC_WRITE(ac, TAP_AXES, pdata->tap_axis_control);
@@ -501,7 +502,7 @@ static int adxl345_probe(struct device *dev, const struct adxl345_bus_ops *bops)
 	return ac;
 
 err_remove_attr:
-        sysfs_remove_attr(&dev->kobj, &adxl345_attr_group);
+        sysfs_remove_group(&dev->kobj, &adxl345_attr_group);
 
         /* we will return an ERR PTR */
 err_out:
@@ -515,6 +516,8 @@ static int adxl345_spi_probe(struct spi_device *spi)
 
 	/* init driver and return private ds */
 	ac = adxl345_probe(&spi->dev, &adxl345_spi_bops);
+	if (IS_ERR(ac))
+		return PTR_ERR(ac);
 
 	/* attach private data structure */
 	spi_set_drvdata(spi, ac);
@@ -525,8 +528,8 @@ static int adxl345_spi_probe(struct spi_device *spi)
 static int adxl345_spi_remove(struct spi_device *spi)
 {
 	struct adxl345 *ac = spi_get_drvdata(spi) ;
-	dev_info(&client->dev, "General Kenobi! \n");
-        sysfs_remove_attr(&ac->dev->kobj, &adxl345_attr_group);
+	dev_info(&spi->dev, "General Kenobi! \n");
+        sysfs_remove_group(&ac->dev->kobj, &adxl345_attr_group);
 	input_unregister_device(ac->input);
 	AC_WRITE(ac, POWER_CTL, PCTL_STANDBY);
 	return 0;
@@ -546,7 +549,7 @@ static const struct spi_device_id adxl345_ids[] = {
 
 MODULE_DEVICE_TABLE(spi, adxl345_ids);
 
-static struct i2c_driver adxl345_driver = {
+static struct spi_driver adxl345_driver = {
 	.probe = adxl345_spi_probe,
 	.remove = adxl345_spi_remove,
 	.id_table = adxl345_ids,
